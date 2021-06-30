@@ -1,10 +1,9 @@
 import config from '../config/config'
 import Store from '@/store/index'
-import dayjs from 'dayjs'
 
 export class http {
-    static get(url, params) {
-        if (process.env.NODE_ENV === "development") return request.get(url, params);
+    static get(url, params = {}) {
+        if (http.testRepeat(params)) return Promise.reject('请不要重复提交');
         http.showLoading()
         console.log('get:' + config.baseUrl + url)
         console.log('params:', http.objectToJSON(params))
@@ -16,38 +15,42 @@ export class http {
                     'loginUserToken': Store.state.token
                 }
             }).then((res) => {
+                http.deleteData(params)
                 http.tackleSuccess(resolve, reject, res)
             }).catch(() => {
+                http.deleteData(params)
                 http.tackleError(err, reject)
             })
         })
 
     }
 
-    static post(url, data) {
-        if (process.env.NODE_ENV === "development") return request.post(url, data);
+    static post(url, data = {}) {
+        if (http.testRepeat(data)) return Promise.reject('请不要重复提交');
         http.showLoading()
         console.log('post:' + config.baseUrl + url)
         console.log('data:', http.objectToJSON(data))
         return new Promise((resolve, reject) => {
             HWH5.fetchInternet(config.baseUrl + url, {
                 method: 'post',
-                body: JSON.stringify(data || {}),
+                body: JSON.stringify(data),
                 timeout: config.timeout,
                 headers: {
                     'Content-type': 'application/json;charset=UTF-8',
                     'loginUserToken': Store.state.token
                 }
             }).then((res) => {
+                http.deleteData(data)
                 http.tackleSuccess(resolve, reject, res)
             }).catch((err) => {
+                http.deleteData(data)
                 http.tackleError(err, reject)
             })
         })
     }
 
-    static getPost(url, data, params) {
-        if (process.env.NODE_ENV === "development") return request.getPost(url, data, params);
+    static getPost(url, data = {}, params = {}) {
+        if (http.testRepeat(params)) return Promise.reject('请不要重复提交');
         http.showLoading()
         console.log('getPost:' + config.baseUrl + url)
         console.log('params:', http.objectToJSON(params))
@@ -55,15 +58,17 @@ export class http {
         return new Promise((resolve, reject) => {
             HWH5.fetchInternet(config.baseUrl + url + http.objectUrlEncode(params), {
                 method: 'post',
-                body: JSON.stringify(data || {}),
+                body: JSON.stringify(data),
                 timeout: config.timeout,
                 headers: {
                     'Content-type': 'application/json;charset=UTF-8',
                     'loginUserToken': Store.state.token
                 }
             }).then((res) => {
+                http.deleteData(params)
                 http.tackleSuccess(resolve, reject, res)
             }).catch((err) => {
+                http.deleteData(params)
                 http.tackleError(err, reject)
             })
         })
@@ -73,16 +78,15 @@ export class http {
         http.closeLoading()
         if (res.status - 0 === 200) {
             res.json().then((res) => {
-                console.log('res:', res)
                 if (res.code === 200) {
-                    console.log('resolve')
+                    console.log('resolve', res)
                     resolve(res)
                 } else {
                     HWH5.showToast({
                         msg: res.message,
                         type: 'w'
                     })
-                    console.log('reject')
+                    console.log('reject', res)
                     reject(res)
                 }
             })
@@ -117,10 +121,8 @@ export class http {
 
     static async uploadFile(path) {
         http.showLoading()
-        let address = await HWH5.getLocation(),
-            host = 'http://114.116.237.246:8900/sfa/common/upload'
+        let address = await HWH5.getLocation()
         address = address.longitude + '，' + address.latitude
-        if (process.env.NODE_ENV !== "development") host = 'http://124.70.2.246:8080/sfa/common/upload';
         console.log('address:', address)
         return new Promise((resolve, reject) => {
             HWH5.uploadFile({
@@ -164,79 +166,26 @@ export class http {
         }
     }
 
+    static deleteData(data) {
+        let index = http.requestData.indexOf(data)
+        if (index != -1) http.requestData.splice(index, 1)
+    }
+
+    static testRepeat(data) {
+        let respoensed = http.requestData.indexOf(data)
+        if (respoensed !== -1) {
+            Tip.error('请不要重复提交')
+            return true
+        } else {
+            http.requestData.push(data)
+            setTimeout(function() {
+                http.deleteData(data)
+            }, config.timeout)
+        }
+        return false
+    }
+
 }
 
 http.times = 0;
-
-export class request {
-    static post(url, data) {
-        http.showLoading()
-        console.log('post:' + config.baseUrl + url)
-        console.log('data:', http.objectToJSON(data))
-        return new Promise((resolve, reject) => {
-            let xhr = new XMLHttpRequest()
-            xhr.open('POST', config.baseUrl + url);
-            xhr.onreadystatechange = function() {
-                request.tackle(xhr, resolve, reject)
-            }
-            xhr.setRequestHeader('Content-type', 'application/json;charset=UTF-8')
-            xhr.setRequestHeader('loginUserToken', Store.state.token)
-            xhr.send(JSON.stringify(data || {}));
-        })
-    }
-
-    static get(url, params) {
-        http.showLoading()
-        console.log('get:' + config.baseUrl + url)
-        console.log('params:', http.objectToJSON(params))
-        return new Promise((resolve, reject) => {
-            let xhr = new XMLHttpRequest()
-            xhr.open('get', config.baseUrl + url + http.objectUrlEncode(params));
-            xhr.onreadystatechange = function() {
-                request.tackle(xhr, resolve, reject)
-            }
-            xhr.setRequestHeader('loginUserToken', Store.state.token)
-            xhr.send();
-        })
-    }
-
-    static getPost(url, data, params) {
-        http.showLoading()
-        console.log('getPost:' + config.baseUrl + url)
-        console.log('params:', http.objectToJSON(params))
-        console.log('data:', http.objectToJSON(data))
-        return new Promise((resolve, reject) => {
-            let xhr = new XMLHttpRequest()
-            xhr.open('post', config.baseUrl + url + http.objectUrlEncode(params));
-            xhr.onreadystatechange = function() {
-                request.tackle(xhr, resolve, reject)
-            }
-            xhr.setRequestHeader('loginUserToken', Store.state.token)
-            xhr.setRequestHeader('Content-type', 'application/json;charset=UTF-8')
-            xhr.send(JSON.stringify(data || {}));
-        })
-    }
-
-    static tackle(xhr, resolve, reject) {
-        if (xhr.readyState == 4 && xhr.status == 200) {
-            let json = JSON.parse(xhr.responseText)
-            if (json.code == 200) {
-                resolve(json)
-            } else {
-                HWH5.showToast({
-                    msg: json.message,
-                    type: 'w'
-                })
-                reject(json)
-            }
-            console.log('res:', json)
-        } else if (xhr.readyState == 4) {
-            HWH5.showToast({
-                msg: '网络错误',
-                type: 'w'
-            })
-            reject()
-        }
-        if (xhr.readyState == 4) http.closeLoading();
-    }
-}
+http.requestData = []
